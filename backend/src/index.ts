@@ -21,6 +21,7 @@ const defaultOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'https://focus-meet-ai.vercel.app',
+  'https://focus-meet-ai-t4ml.vercel.app',
 ];
 const configuredOrigins = (process.env.FRONTEND_ORIGINS || '')
   .split(',')
