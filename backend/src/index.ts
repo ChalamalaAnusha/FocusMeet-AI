@@ -16,12 +16,16 @@ const server = http.createServer(app);
 
 const PORT = Number(process.env.PORT || 5000);
 const HOST = process.env.HOST || '0.0.0.0';
-const allowedOrigins = (process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+
+const allowedOrigins = (
+  process.env.FRONTEND_ORIGINS ||
+  'http://localhost:5173,http://127.0.0.1:5173'
+)
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-// Enable CORS for frontend Vite dev server (5173) and any local network access
+// Enable CORS for local development and the deployed Render frontend
 app.use(
   cors({
     origin: allowedOrigins,
@@ -64,6 +68,7 @@ setupSocketHandlers(io);
 // Start server
 async function start() {
   await connectDB();
+
   server.listen(PORT, HOST, () => {
     console.log(`=================================================`);
     console.log(`🚀 FocusMeet AI Backend running on port ${PORT}`);
