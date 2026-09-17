@@ -17,13 +17,16 @@ const server = http.createServer(app);
 const PORT = Number(process.env.PORT || 5000);
 const HOST = process.env.HOST || '0.0.0.0';
 
-const allowedOrigins = (
-  process.env.FRONTEND_ORIGINS ||
-  'http://localhost:5173,http://127.0.0.1:5173'
-)
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://focus-meet-ai.vercel.app',
+];
+const configuredOrigins = (process.env.FRONTEND_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const allowedOrigins = [...new Set([...defaultOrigins, ...configuredOrigins])];
 
 // Enable CORS for local development and the deployed Render frontend
 app.use(

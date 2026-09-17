@@ -1,5 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  'https://focusmeet-ai-2.onrender.com/api';
 const invalidateSessionOnUnauthorized = (status: number, endpoint: string, hadToken: boolean) => {
   if (status === 401 && hadToken && !endpoint.startsWith('/auth/')) {
     localStorage.removeItem('focusmeet_token');

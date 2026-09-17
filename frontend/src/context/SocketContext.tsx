@@ -22,11 +22,15 @@ interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
-export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { token, user } = useAuth();
+
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
+  const [incomingCall, setIncomingCall] =
+    useState<IncomingCallData | null>(null);
 
   useEffect(() => {
     if (!token || !user) {
@@ -38,9 +42,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    const socketHost = import.meta.env.VITE_SOCKET_URL || window.location.origin;
+    const socketHost =
+      import.meta.env.VITE_SOCKET_URL ||
+      'https://focusmeet-ai-2.onrender.com';
+
+    console.log('[Socket] Connecting to:', socketHost);
+
     const newSocket = io(socketHost, {
-      auth: { token },
+      auth: {
+        token,
+      },
       transports: ['websocket', 'polling'],
     });
 
@@ -49,16 +60,27 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsConnected(true);
     });
 
+    newSocket.on('connect_error', (error) => {
+      console.error('[Socket] Connection error:', error.message);
+      setIsConnected(false);
+    });
+
     newSocket.on('disconnect', () => {
       console.log('[Socket] Disconnected from signaling server');
       setIsConnected(false);
     });
 
-    // Real-time direct app-to-app meeting invitation popup
-    newSocket.on('meeting:incoming-call', (callData: IncomingCallData) => {
-      console.log('[Socket] Incoming meeting invitation received:', callData);
-      setIncomingCall(callData);
-    });
+    newSocket.on(
+      'meeting:incoming-call',
+      (callData: IncomingCallData) => {
+        console.log(
+          '[Socket] Incoming meeting invitation received:',
+          callData
+        );
+
+        setIncomingCall(callData);
+      }
+    );
 
     setSocket(newSocket);
 
@@ -87,8 +109,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
 export const useSocket = () => {
   const context = useContext(SocketContext);
+
   if (!context) {
     throw new Error('useSocket must be used within a SocketProvider');
   }
+
   return context;
 };
