@@ -33,6 +33,9 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {
+        // Browsers may require a user gesture before starting remote media.
+      });
     }
   }, [stream]);
 

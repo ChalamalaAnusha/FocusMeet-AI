@@ -17,6 +17,7 @@ export class WebRTCManager {
   private onRemoteStreamCallback: ((socketId: string, stream: MediaStream) => void) | null = null;
   private onRemoteLeaveCallback: ((socketId: string) => void) | null = null;
   private isCameraBroadcasting: boolean = true;
+  private reconnectTimers = new Map<string, number>();
 
   constructor(socket: any) {
     this.socket = socket;
@@ -213,7 +214,17 @@ export class WebRTCManager {
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+      if (pc.iceConnectionState === 'failed') {
+        this.restartIce(remoteSocketId, pc);
+      } else if (pc.iceConnectionState === 'closed') {
+        this.closePeer(remoteSocketId);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        this.restartIce(remoteSocketId, pc);
+      } else if (pc.connectionState === 'closed') {
         this.closePeer(remoteSocketId);
       }
     };
@@ -309,6 +320,28 @@ export class WebRTCManager {
     }
   }
 
+  private restartIce(socketId: string, pc: RTCPeerConnection) {
+    if (this.reconnectTimers.has(socketId)) return;
+
+    const timer = window.setTimeout(async () => {
+      this.reconnectTimers.delete(socketId);
+      if (pc.connectionState === 'closed') return;
+
+      try {
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        this.socket.emit('webrtc:offer', {
+          toSocketId: socketId,
+          offer,
+        });
+      } catch (err) {
+        console.error('Error restarting ICE:', err);
+      }
+    }, 500);
+
+    this.reconnectTimers.set(socketId, timer);
+  }
+
   private closePeer(socketId: string) {
     const pc = this.peerConnections.get(socketId);
     if (pc) {
@@ -317,6 +350,11 @@ export class WebRTCManager {
     }
     this.remoteStreams.delete(socketId);
     this.pendingIceCandidates.delete(socketId);
+    const reconnectTimer = this.reconnectTimers.get(socketId);
+    if (reconnectTimer) {
+      window.clearTimeout(reconnectTimer);
+      this.reconnectTimers.delete(socketId);
+    }
     if (this.onRemoteLeaveCallback) {
       this.onRemoteLeaveCallback(socketId);
     }
@@ -332,5 +370,7 @@ export class WebRTCManager {
     this.peerConnections.clear();
     this.remoteStreams.clear();
     this.pendingIceCandidates.clear();
+    this.reconnectTimers.forEach((timer) => window.clearTimeout(timer));
+    this.reconnectTimers.clear();
   }
 }
