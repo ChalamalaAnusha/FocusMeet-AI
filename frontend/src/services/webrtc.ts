@@ -12,6 +12,7 @@ export class WebRTCManager {
   private screenStream: MediaStream | null = null;
   private peerConnections = new Map<string, RTCPeerConnection>(); // socketId -> RTCPeerConnection
   private remoteStreams = new Map<string, MediaStream>();
+  private pendingIceCandidates = new Map<string, RTCIceCandidateInit[]>();
   private socket: any;
   private onRemoteStreamCallback: ((socketId: string, stream: MediaStream) => void) | null = null;
   private onRemoteLeaveCallback: ((socketId: string) => void) | null = null;
@@ -244,6 +245,7 @@ export class WebRTCManager {
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        await this.flushPendingIceCandidates(fromSocketId, pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
@@ -262,6 +264,7 @@ export class WebRTCManager {
       if (pc) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          await this.flushPendingIceCandidates(fromSocketId, pc);
         } catch (err) {
           console.error('Error setting remote answer:', err);
         }
@@ -271,12 +274,19 @@ export class WebRTCManager {
     // Received ICE candidate
     this.socket.on('webrtc:ice-candidate', async ({ fromSocketId, candidate }: any) => {
       const pc = this.peerConnections.get(fromSocketId);
-      if (pc && candidate) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error('Error adding ICE candidate:', err);
-        }
+      if (!candidate) return;
+
+      if (!pc || !pc.remoteDescription) {
+        const pending = this.pendingIceCandidates.get(fromSocketId) || [];
+        pending.push(candidate);
+        this.pendingIceCandidates.set(fromSocketId, pending);
+        return;
+      }
+
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error('Error adding ICE candidate:', err);
       }
     });
 
@@ -286,6 +296,19 @@ export class WebRTCManager {
     });
   }
 
+  private async flushPendingIceCandidates(socketId: string, pc: RTCPeerConnection) {
+    const pending = this.pendingIceCandidates.get(socketId) || [];
+    this.pendingIceCandidates.delete(socketId);
+
+    for (const candidate of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error('Error adding queued ICE candidate:', err);
+      }
+    }
+  }
+
   private closePeer(socketId: string) {
     const pc = this.peerConnections.get(socketId);
     if (pc) {
@@ -293,6 +316,7 @@ export class WebRTCManager {
       this.peerConnections.delete(socketId);
     }
     this.remoteStreams.delete(socketId);
+    this.pendingIceCandidates.delete(socketId);
     if (this.onRemoteLeaveCallback) {
       this.onRemoteLeaveCallback(socketId);
     }
@@ -307,5 +331,6 @@ export class WebRTCManager {
     this.peerConnections.forEach((pc) => pc.close());
     this.peerConnections.clear();
     this.remoteStreams.clear();
+    this.pendingIceCandidates.clear();
   }
 }
